@@ -83,4 +83,6 @@ def test():
     y = net(x)
     print(y.size())
 
-# test()
+    print(net.state_dict().keys())
+
+test()

@@ -21,8 +21,10 @@ args = parser.parse_args()
 print(args)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+if device == 'cuda':
+    torch.cuda.empty_cache()
 best_acc = 0  # best test accuracy
-start_epoch = 0  # start from epoch 0 or last checkpoint epoch
+start_epoch = 1  # start from epoch 0 or last checkpoint epoch
 
 # Data
 print('==> Preparing data..')
@@ -39,10 +41,10 @@ transform_test = transforms.Compose([
 ])
 
 trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=False, transform=transform_train)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=256, shuffle=True, num_workers=2)
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=128, shuffle=True, num_workers=2)
 
 testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=False, transform=transform_test)
-testloader = torch.utils.data.DataLoader(testset, batch_size=256, shuffle=False, num_workers=2)
+testloader = torch.utils.data.DataLoader(testset, batch_size=128, shuffle=False, num_workers=2)
 
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
@@ -66,7 +68,6 @@ if device == 'cuda':
     net = torch.nn.DataParallel(net)
     cudnn.benchmark = True
 
-print('pre resume')
 if args.resume:
     # Load checkpoint.
     print('==> Resuming from checkpoint..')
@@ -78,9 +79,9 @@ if args.resume:
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
+schedular = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
 
 
-# Training
 def train(epoch):
     print('\nEpoch: %d' % epoch)
     net.train()
@@ -139,6 +140,10 @@ def test(epoch):
         best_acc = acc
 
 
-for epoch in range(start_epoch, start_epoch + 200):
+for epoch in range(start_epoch, start_epoch + 300):
+    if epoch % 10 == 0:
+        print('learning rate at epoch {}: {}'
+              .format(epoch, optimizer.param_groups[0]['lr']))
     train(epoch)
     test(epoch)
+    schedular.step()
