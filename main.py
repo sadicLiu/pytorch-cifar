@@ -17,6 +17,8 @@ from utils import progress_bar
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
+parser.add_argument('--num_epoch', default=150, type=int, help='Number of training epochs')
+parser.add_argument('--save_flag', required=True, type=str, help='The flag appended to ckpt name')
 args = parser.parse_args()
 print(args)
 
@@ -40,24 +42,27 @@ transform_test = transforms.Compose([
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
 
-trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=False, transform=transform_train)
+trainset = torchvision.datasets.CIFAR10(root='/home/liuhy/res/deep-learning/数据集/cifar', train=True, download=False,
+                                        transform=transform_train)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=128, shuffle=True, num_workers=2)
 
-testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=False, transform=transform_test)
+testset = torchvision.datasets.CIFAR10(root='/home/liuhy/res/deep-learning/数据集/cifar', train=False, download=False,
+                                       transform=transform_test)
 testloader = torch.utils.data.DataLoader(testset, batch_size=128, shuffle=False, num_workers=2)
 
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
 # Model
 print('==> Building model..')
-# net = VGG('VGG19')
+# net = VGG('VGG16')
+net = VGG('VGG19')
 # net = ResNet18()
 # net = PreActResNet18()
 # net = GoogLeNet()
 # net = DenseNet121()
 # net = ResNeXt29_2x64d()
 # net = MobileNet()
-net = MobileNetV2()
+# net = MobileNetV2()
 # net = DPN92()
 # net = ShuffleNetG2()
 # net = SENet18()
@@ -68,18 +73,18 @@ if device == 'cuda':
     net = torch.nn.DataParallel(net)
     cudnn.benchmark = True
 
+ckpt_name = './checkpoint/ckpt_' + args.save_flag + '.pth'
 if args.resume:
     # Load checkpoint.
     print('==> Resuming from checkpoint..')
     assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('./checkpoint/ckpt.pth')
+    checkpoint = torch.load(ckpt_name)
     net.load_state_dict(checkpoint['net'])
     best_acc = checkpoint['acc']
     start_epoch = checkpoint['epoch']
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
-schedular = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
 
 
 def train(epoch):
@@ -136,14 +141,13 @@ def test(epoch):
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        torch.save(state, './checkpoint/ckpt.pth')
+        torch.save(state, ckpt_name)
         best_acc = acc
 
 
-for epoch in range(start_epoch, start_epoch + 300):
+for epoch in range(start_epoch, start_epoch + args.num_epoch):
     if epoch % 10 == 0:
         print('learning rate at epoch {}: {}'
               .format(epoch, optimizer.param_groups[0]['lr']))
     train(epoch)
     test(epoch)
-    schedular.step()
