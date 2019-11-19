@@ -6,12 +6,52 @@
 import os
 import sys
 import time
+import json
 
 import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torchvision
 import torchvision.transforms as transforms
+
+
+def load_metric(metric_name):
+    assert os.path.isfile(metric_name), 'Error: no metric file found!'
+    with open(metric_name) as f:
+        metric = json.load(f)
+
+    train_losses = metric['train_losses']
+    test_losses = metric['test_losses']
+    train_acc = metric['train_acc']
+    test_acc = metric['test_acc']
+
+    return train_losses, test_losses, train_acc, test_acc
+
+
+def save_metric(metric_name, train_losses, test_losses, train_acc, test_acc):
+
+    metric = {
+        'train_losses': train_losses,
+        'test_losses': test_losses,
+        'train_acc': train_acc,
+        'test_acc': test_acc
+    }
+
+    print('Saving metrics...')
+    with open(metric_name, 'w') as f:
+        json.dump(metric, f)
+
+
+def resume_ckpt(net, ckpt_name):
+    '''Load saved info from ckpt file'''
+    print('==> Resuming from checkpoint..')
+    assert os.path.isfile(ckpt_name), 'Error: no checkpoint file found!'
+    checkpoint = torch.load(ckpt_name)
+    net.load_state_dict(checkpoint['net'])
+    best_acc = checkpoint['acc']
+    start_epoch = checkpoint['epoch']
+
+    return net, best_acc, start_epoch
 
 
 def get_mean_and_std(dataset):
@@ -45,6 +85,7 @@ def init_params(net):
                 init.constant(m.bias, 0)
 
 
+# 获取命令行的宽高, 必须在命令行里运行才有效
 _, term_width = os.popen('stty size', 'r').read().split()
 term_width = int(term_width)
 
@@ -53,15 +94,18 @@ last_time = time.time()
 begin_time = last_time
 
 
-def progress_bar(current, total, msg=None):
+# Epoch: 1
+# ^Z===>..... 23/391 .....]  Step: 109ms | Tot: 2s457ms | Loss: 2.123 | Acc: 21.501% (633/2944)
+# 每个batch调用一次
+def progress_bar(current_batch, total_batch, msg=None):
     global last_time, begin_time
-    if current == 0:
+    if current_batch == 0:
         begin_time = time.time()  # Reset for new bar.
 
-    cur_len = int(TOTAL_BAR_LENGTH * current / total)
+    cur_len = int(TOTAL_BAR_LENGTH * current_batch / total_batch)
     rest_len = int(TOTAL_BAR_LENGTH - cur_len) - 1
 
-    sys.stdout.write(' [')
+    sys.stdout.write('[')
     for i in range(cur_len):
         sys.stdout.write('=')
     sys.stdout.write('>')
@@ -69,14 +113,14 @@ def progress_bar(current, total, msg=None):
         sys.stdout.write('.')
     sys.stdout.write(']')
 
-    cur_time = time.time()
-    step_time = cur_time - last_time
+    cur_time = time.time()  # 当前batch结束的时间
+    step_time = cur_time - last_time  # 两个batch之间间隔的时间
     last_time = cur_time
-    tot_time = cur_time - begin_time
+    total_time = cur_time - begin_time  # 从第1个batch到当前batch所用的时间
 
     L = []
     L.append('  Step: %s' % format_time(step_time))
-    L.append(' | Tot: %s' % format_time(tot_time))
+    L.append(' | Total: %s' % format_time(total_time))
     if msg:
         L.append(' | ' + msg)
 
@@ -86,11 +130,11 @@ def progress_bar(current, total, msg=None):
         sys.stdout.write(' ')
 
     # Go back to the center of the bar.
-    for i in range(term_width - int(TOTAL_BAR_LENGTH / 2) + 2):
+    for i in range(term_width - int(TOTAL_BAR_LENGTH / 2) + 6):
         sys.stdout.write('\b')
-    sys.stdout.write(' %d/%d ' % (current + 1, total))
+    sys.stdout.write(' batch:%d/%d ' % (current_batch + 1, total_batch))
 
-    if current < total - 1:
+    if current_batch < total_batch - 1:
         sys.stdout.write('\r')
     else:
         sys.stdout.write('\n')
@@ -138,7 +182,8 @@ if __name__ == '__main__':
         # transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     ])
 
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=False, transform=transform_train)
+    trainset = torchvision.datasets.CIFAR10(root='/home/liuhy/res/deep-learning/数据集/cifar',
+                                            train=True, download=False, transform=transform_train)
     mean, std = get_mean_and_std(trainset)
     print(mean)
     print(std)

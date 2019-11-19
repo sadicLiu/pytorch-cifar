@@ -128,4 +128,4 @@ def test():
     print("flops: ", flops)
     print("params: ", params)
 
-test()
+# test()
