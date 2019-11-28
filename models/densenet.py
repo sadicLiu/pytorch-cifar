@@ -65,7 +65,7 @@ class _DenseBlock(nn.Module):
                 bn_size=bn_size,
                 drop_rate=drop_rate,
                 efficient=efficient,
-                )
+            )
             self.add_module('denselayer%d' % (i + 1), layer)
 
     def forward(self, init_features):
@@ -165,12 +165,8 @@ class DenseNet(nn.Module):
 def test():
     net = DenseNet()
     x = torch.randn(1, 3, 32, 32)
-
-    for name, layer in net.named_children():
-        if name == "features":
-            for n, l in layer.named_children():
-                x = l(x)
-                print(n, ": ", x.size())
+    y = net(x)
+    print(net)
 
 
-# test()
+test()

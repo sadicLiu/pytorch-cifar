@@ -14,6 +14,7 @@ parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--num_epoch', default=150, type=int, help='Number of training epochs')
 parser.add_argument('--save_flag', required=True, type=str, help='The flag appended to ckpt name')
+
 args = parser.parse_args()
 
 project_dir = os.path.dirname(os.path.abspath(__file__))
@@ -50,8 +51,11 @@ if device == 'cuda':
     net = torch.nn.DataParallel(net)  # , device_ids=[0, 1])  # 多GPU计算
     cudnn.benchmark = True
 
-ckpt_name = project_dir + '/checkpoint/ckpt_' + args.save_flag + '.pth'
-metric_name = project_dir + '/metric/metric_' + args.save_flag + '.json'
+optim_flag = 'sgd'
+ckpt_name = project_dir + '/checkpoint/ckpt_' + args.save_flag + '_' + optim_flag + '.pth'
+metric_name = project_dir + '/metric/metric_' + args.save_flag + '_' + optim_flag + '.json'
+# ckpt_name = project_dir + '/checkpoint/ckpt_' + args.save_flag + '.pth'
+# metric_name = project_dir + '/metric/metric_' + args.save_flag + '.json'
 if args.resume:
     # Load checkpoint.
     net, best_acc, start_epoch = resume_ckpt(net, ckpt_name)
