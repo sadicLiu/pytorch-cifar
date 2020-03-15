@@ -19,6 +19,8 @@ def _bn_function_factory(norm, relu, conv):
 
 
 class _DenseLayer(nn.Module):  # Bottleneck Layer
+    """由1个1x1卷积 和 1个3x3卷积组成, 1x1卷积首先concat所有特征图, 并进行通道数降采样, 然后3x3卷积提取特征"""
+
     def __init__(self, num_input_features, growth_rate, bn_size, drop_rate, efficient=False):
         super(_DenseLayer, self).__init__()
         self.add_module('norm1', nn.BatchNorm2d(num_input_features)),
@@ -46,6 +48,8 @@ class _DenseLayer(nn.Module):  # Bottleneck Layer
 
 
 class _Transition(nn.Sequential):
+    """先用1x1卷积将输入的特征图通道数减半, 再用平均池化将特征图尺寸减半"""
+
     def __init__(self, num_input_features, num_output_features):
         super(_Transition, self).__init__()
         self.add_module('norm', nn.BatchNorm2d(num_input_features))
@@ -58,7 +62,7 @@ class _Transition(nn.Sequential):
 class _DenseBlock(nn.Module):
     def __init__(self, num_layers, num_input_features, bn_size, growth_rate, drop_rate, efficient=False):
         super(_DenseBlock, self).__init__()
-        for i in range(num_layers):
+        for i in range(num_layers):  # e.g. 16
             layer = _DenseLayer(
                 num_input_features + i * growth_rate,
                 growth_rate=growth_rate,
@@ -69,6 +73,7 @@ class _DenseBlock(nn.Module):
             self.add_module('denselayer%d' % (i + 1), layer)
 
     def forward(self, init_features):
+        """把所有层输出的特征图都放到list里, 然后在dim1[nChw]上把这些特征图连起来"""
         features = [init_features]
         for name, layer in self.named_children():
             new_features = layer(*features)
@@ -121,7 +126,7 @@ class DenseNet(nn.Module):
         num_features = num_init_features
         for i, num_layers in enumerate(block_config):
             block = _DenseBlock(
-                num_layers=num_layers,
+                num_layers=num_layers,  # e.g. 16
                 num_input_features=num_features,
                 bn_size=bn_size,
                 growth_rate=growth_rate,
@@ -130,6 +135,8 @@ class DenseNet(nn.Module):
             )
             self.features.add_module('denseblock%d' % (i + 1), block)
             num_features = num_features + num_layers * growth_rate
+
+            # 除了最后一个block, 在其他block之后加入transition layer
             if i != len(block_config) - 1:
                 trans = _Transition(num_input_features=num_features,
                                     num_output_features=int(num_features * compression))
@@ -143,6 +150,16 @@ class DenseNet(nn.Module):
         self.classifier = nn.Linear(num_features, num_classes)
 
         # Initialization
+        self._init_weights()
+
+    def forward(self, x):
+        features = self.features(x)
+        out = F.relu(features, inplace=True)
+        out = F.avg_pool2d(out, kernel_size=self.avgpool_s1ize).view(features.size(0), -1)
+        out = self.classifier(out)
+        return out
+
+    def _init_weights(self):
         for name, param in self.named_parameters():
             if 'conv' in name and 'weight' in name:
                 n = param.size(0) * param.size(2) * param.size(3)
@@ -154,19 +171,13 @@ class DenseNet(nn.Module):
             elif 'classifier' in name and 'bias' in name:
                 param.data.fill_(0)
 
-    def forward(self, x):
-        features = self.features(x)
-        out = F.relu(features, inplace=True)
-        out = F.avg_pool2d(out, kernel_size=self.avgpool_size).view(features.size(0), -1)
-        out = self.classifier(out)
-        return out
 
-
-def test():
+if __name__ == '__main__':
     net = DenseNet()
     x = torch.randn(1, 3, 32, 32)
     y = net(x)
+
+    # import torchvision.models as models
+    # net = models.DenseNet()
+
     print(net)
-
-
-test()
